@@ -1,8 +1,9 @@
 import torch
 import torch.nn as nn
 from einops.einops import rearrange
-from roi_align.roi_align import RoIAlign
-    
+# from roi_align.roi_align import RoIAlign
+from .roi_align import RoIAlign
+
 class FinePreprocess(nn.Module):
     def __init__(self, config):
         super().__init__()
