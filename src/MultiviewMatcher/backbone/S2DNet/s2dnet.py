@@ -11,7 +11,8 @@ import torch
 import torch.nn as nn
 from torchvision import models
 import logging
-from roi_align.roi_align import RoIAlign
+
+from ...matcher_module.roi_align import RoIAlign
 
 from pathlib import Path
 
