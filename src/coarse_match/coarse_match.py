@@ -4,10 +4,10 @@ import os
 
 import math
 
-from src.utils.ray_utils import chunks, split_dict
+from src.utils.ray_utils import split_dict
 from src.utils.data_io import save_h5, load_h5
-from .utils.merge_kpts import Match2Kpts
 from .coarse_match_worker import *
+from .match_to_track import matches_to_indexed_tracks
 
 cfgs = {
     "data": {
@@ -111,29 +111,10 @@ def detector_free_coarse_matching(
         logger.info(f"Raw matches cach begin: {cache_dir}")
         save_h5(matches, cache_dir, verbose=verbose)
 
-    # Combine keypoints
-    n_imgs = len(image_lists)
-    logger.info("Combine keypoints!")
-    all_kpts = Match2Kpts(
-        matches, image_lists, name_split=cfgs["matcher"]["pair_name_split"]
-    )
-    sub_kpts = chunks(all_kpts, math.ceil(n_imgs / 1))  # equal to only 1 worker
-    obj_refs = [keypoint_worker(sub_kpt, verbose=verbose) for sub_kpt in sub_kpts]
-    keypoints = dict(ChainMap(*obj_refs))
+    image_keypoint_to_index, match_indices = matches_to_indexed_tracks(matches, image_lists)
 
-    # Convert keypoints match to keypoints indexs
-    logger.info("Update matches")
-    obj_refs = [
-        update_matches(
-            sub_matches,
-            keypoints,
-            merge=False,
-            verbose=verbose,
-            pair_name_split=cfgs["matcher"]["pair_name_split"],
-        )
-        for sub_matches in split_dict(matches, math.ceil(len(matches) / 1))
-    ]
-    updated_matches = dict(ChainMap(*obj_refs))
+    updated_matches = match_indices
+    keypoints = image_keypoint_to_index
 
     # Post process keypoints:
     keypoints = {

@@ -1,4 +1,3 @@
-import ray
 from loguru import logger
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
@@ -8,7 +7,6 @@ from tqdm import tqdm
 
 from src.utils.misc import lower_config
 from .kornia_loftr import LoFTRMatcher
-from .utils.merge_kpts import agg_groupby_2d
 from .utils.detector_wrapper import DetectorWrapper
 from ..dataset.coarse_matching_dataset import CoarseMatchingDataset
 
@@ -155,101 +153,6 @@ def match_worker(subset_ids, image_lists, covis_pairs_out, cfgs, pba=None, verbo
     return matches
 
 
-def keypoint_worker(name_kpts, pba=None, verbose=True):
-    """merge keypoints associated with one image.
-    """
-    keypoints = {}
-
-    if verbose:
-        name_kpts = tqdm(name_kpts) if pba is None else name_kpts
-    else:
-        assert pba is None
-
-    for name, kpts in name_kpts:
-        kpt2score = agg_groupby_2d(kpts[:, :2].astype(int), kpts[:, -1], agg="sum")
-        kpt2id_score = {
-            k: (i, v)
-            for i, (k, v) in enumerate(
-                sorted(kpt2score.items(), key=lambda kv: kv[1], reverse=True)
-            )
-        }
-        keypoints[name] = kpt2id_score
-
-        if pba is not None:
-            pba.update.remote(1)
-    return keypoints
-
-
-def update_matches(matches, keypoints, merge=False, pba=None, verbose=True, **kwargs):
-    # convert match to indices
-    ret_matches = {}
-
-    if verbose:
-        matches_items = tqdm(matches.items()) if pba is None else matches.items()
-    else:
-        assert pba is None
-        matches_items = matches.items()
-
-    for k, v in matches_items:
-        mkpts0, mkpts1 = (
-            map(tuple, v[:, :2].astype(int)),
-            map(tuple, v[:, 2:4].astype(int)),
-        )
-        name0, name1 = k.split(kwargs['pair_name_split'])
-        _kpts0, _kpts1 = keypoints[name0], keypoints[name1]
-
-        mids = np.array(
-            [
-                [_kpts0[p0][0], _kpts1[p1][0]]
-                for p0, p1 in zip(mkpts0, mkpts1)
-                if p0 in _kpts0 and p1 in _kpts1
-            ]
-        )
-
-        if len(mids) == 0:
-            mids = np.empty((0, 2))
-
-        def _merge_possible(name):  # only merge after dynamic nms (for now)
-            return f'{name}_no-merge' not in keypoints
-
-        if merge and _merge_possible(name0) and _merge_possible(name1):
-            merge_ids = []
-            mkpts0, mkpts1 = map(tuple, v[:, :2].astype(int)), map(tuple, v[:, 2:4].astype(int))
-            for p0, p1 in zip(mkpts0, mkpts1):
-                if (*p0, -2) in _kpts0 and (*p1, -2) in _kpts1:
-                    merge_ids.append([_kpts0[(*p0, -2)][0], _kpts1[(*p1, -2)][0]])
-                elif p0 in _kpts0 and (*p1, -2) in _kpts1:
-                    merge_ids.append([_kpts0[p0][0], _kpts1[(*p1, -2)][0]])
-                elif (*p0, -2) in _kpts0 and p1 in _kpts1:
-                    merge_ids.append([_kpts0[(*p0, -2)][0], _kpts1[p1][0]])
-            merge_ids = np.array(merge_ids)
-
-            if len(merge_ids) == 0:
-                merge_ids = np.empty((0, 2))
-            try:
-                mids_multiview = np.concatenate([mids, merge_ids], axis=0)
-            except ValueError:
-                import ipdb;
-                ipdb.set_trace()
-
-            mids = np.unique(mids_multiview, axis=0)
-        else:
-            assert (
-                    len(mids) == v.shape[0]
-            ), f"len mids: {len(mids)}, num matches: {v.shape[0]}"
-
-        ret_matches[k] = mids.astype(int)  # (N,2)
-        if pba is not None:
-            pba.update.remote(1)
-
-    return ret_matches
-
-
-@ray.remote(num_cpus=1)
-def update_matches_ray_wrapper(*args, **kwargs):
-    return update_matches(*args, **kwargs)
-
-
 def transform_keypoints(keypoints, pba=None, verbose=True):
     """assume keypoints sorted w.r.t. score"""
     ret_kpts = {}
@@ -273,8 +176,3 @@ def transform_keypoints(keypoints, pba=None, verbose=True):
         if pba is not None:
             pba.update.remote(1)
     return ret_kpts, ret_scores
-
-
-@ray.remote(num_cpus=1)
-def transform_keypoints_ray_wrapper(*args, **kwargs):
-    return transform_keypoints(*args, **kwargs)
