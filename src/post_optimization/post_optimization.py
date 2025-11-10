@@ -157,8 +157,6 @@ def post_optimization(
                 rewindow_size_factor=rewindow_size_factor if cfgs["enable_adaptive_downscale_window"] else None,
                 model_idx=model_idx if cfgs['enable_multiple_models'] else None,
                 visualize_dir=visualize_dir,
-                use_ray=fine_match_use_ray,
-                ray_cfg=ray_cfg,
                 verbose=verbose
             )
         else:

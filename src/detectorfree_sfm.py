@@ -58,12 +58,7 @@ def DetectorFreeSfM(
         img_list, args, strategy=args.img_pair_strategy, pair_path=osp.join(work_dir, 'pairs.txt'), verbose=verbose
     )
 
-    # Make evaluator:
-    evaluator = (
-        Evaluator(img_list, gt_pose_dir, triangulate_mode=args.triangulation_mode, verbose=verbose)
-        if not args.close_eval and gt_pose_dir is not None
-        else None
-    )
+
 
     # Parse configs
     triangulation_mode = args.triangulation_mode
@@ -169,8 +164,12 @@ def DetectorFreeSfM(
     if visualize:
         save_colmap_ws_to_vis3d(colmap_refined_dir, vis_dir, name_prefix="after_refine")
 
-    if evaluator:
-        logger.info(f"Metric of: Coarse reconstruction")
+
+    evaluator = (
+        Evaluator(img_list, gt_pose_dir, triangulate_mode=args.triangulation_mode, verbose=verbose)
+        if not args.close_eval and gt_pose_dir is not None
+        else None
+    )
 
     error_dict, metrics_dict = evaluator.eval_metric(osp.join(colmap_coarse_dir, best_model_id))
 
