@@ -7,6 +7,7 @@ BASE_DIR = Path("SfM_dataset/eth3d_triangulation_dataset")
 SCENES = ["kicker", "office", "delivery_area", "facade", "meadow", "relief",
           "electro", "terrace", "terrains", "courtyard", "relief_2", "pipes", "playground"]
 METHOD_DIR = "DetectorFreeSfM_loftr_official_coarse_only__pri_pose"
+
 EVAL_TOOL = Path("third_party/multi-view-evaluation/build/ETH3DMultiViewEvaluation")
 
 results = {}
