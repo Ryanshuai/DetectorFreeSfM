@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 from pathlib import Path
+
 from src.evaluator.evaluator import Evaluator
 from src.utils.colmap.eval_helper import get_best_colmap_index
 
@@ -86,6 +87,30 @@ def main():
         # *******************
         # aucs_1
         # ...
+        # aucs_2  all official (have not try because rio_align is not compiled)
+        #
+        # aucs_2  all official with this evaluate_sfm_res
+        # auc @ 1: 0.8813634737922685
+        # auc @ 3: 0.9287084595180577
+        # auc @ 5: 0.9672357609447102
+        # auc @ 10: 0.9836178804723552
+        # auc @ 20: 0.9918089402361776
+        #
+        # ** ** ** ** ** ** ** ** ** *
+        # aucs_2  official with pytorch roi_align
+        # auc @ 1: 0.8812587424514412
+        # auc @ 3: 0.9286735490711152
+        # auc @ 5: 0.9693574658104934
+        # auc @ 10: 0.9846787329052468
+        # auc @ 20: 0.9923393664526234
+        #
+        # aucs_2  official with pytorch roi_align with this evaluate_sfm_res
+        # auc @ 1: 0.8808692180956811
+        # auc @ 3: 0.9285437076191951
+        # auc @ 5: 0.9666287450398734
+        # auc @ 10: 0.9833143725199367
+        # auc @ 20: 0.9916571862599683
+        #
 
         keys = sorted(metrics_all.keys())  # 比如 ['aucs_0', 'aucs_1', 'aucs_2']
         for i, k in enumerate(keys):
