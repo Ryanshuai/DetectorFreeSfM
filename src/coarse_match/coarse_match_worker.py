@@ -1,7 +1,5 @@
 import ray
-import os
 from loguru import logger
-
 from torch.utils.data import DataLoader
 import pytorch_lightning as pl
 import torch
@@ -9,14 +7,15 @@ import numpy as np
 from tqdm import tqdm
 
 from src.utils.misc import lower_config
-from src.utils.torch_utils import update_state_dict, STATE_DICT_MAPPER
-
+from .kornia_loftr import LoFTRMatcher
 from .utils.merge_kpts import agg_groupby_2d
 from .utils.detector_wrapper import DetectorWrapper
 from ..dataset.coarse_matching_dataset import CoarseMatchingDataset
 
+
 def names_to_pair(name0, name1):
     return '_'.join((name0.replace('/', '-'), name1.replace('/', '-')))
+
 
 def build_model(args):
     pl.seed_everything(args['seed'])
@@ -53,7 +52,7 @@ def build_model(args):
         _config['aspan']['match_coarse']['thr'] = match_thr
         matcher = ASpanFormer(config=_config['aspan'], online_resize=True)
         state_dict = torch.load(matcher_args['weight_path'], map_location='cpu')['state_dict']
-        matcher.load_state_dict(state_dict,strict=False)
+        matcher.load_state_dict(state_dict, strict=False)
 
         detector = DetectorWrapper()
         detector.eval()
@@ -68,9 +67,9 @@ def build_model(args):
         config.merge_from_file(matcher_args[f'cfg_path_{model_type}'])
         _config = lower_config(config)
         _config['matchformer']['match_coarse']['thr'] = match_thr
-        matcher = Matchformer(config=_config['matchformer'],)
+        matcher = Matchformer(config=_config['matchformer'], )
         state_dict = torch.load(matcher_args['weight_path'], map_location='cpu')
-        matcher.load_state_dict(state_dict,strict=True)
+        matcher.load_state_dict(state_dict, strict=True)
 
         detector = DetectorWrapper()
         detector.eval()
@@ -79,6 +78,7 @@ def build_model(args):
         raise NotImplementedError
 
     return detector, matcher
+
 
 def extract_preds(data):
     """extract predictions assuming bs==1"""
@@ -89,6 +89,7 @@ def extract_preds(data):
     mconfs = data["mconf"].cpu().numpy()
 
     return mkpts0, mkpts1, mconfs
+
 
 @torch.no_grad()
 def extract_matches(data, detector=None, matcher=None):
@@ -104,6 +105,8 @@ def match_worker(subset_ids, image_lists, covis_pairs_out, cfgs, pba=None, verbo
     """extract matches from part of the possible image pair permutations"""
     args = cfgs['matcher']
     detector, matcher = build_model(args['model'])
+
+    kornia_loftr = LoFTRMatcher()
     detector.cuda()
     matcher.cuda()
     matches = {}
@@ -129,11 +132,18 @@ def match_worker(subset_ids, image_lists, covis_pairs_out, cfgs, pba=None, verbo
             detector=detector,
             matcher=matcher,
         )
+        mkpts0_new, mkpts1_new, mconfs_new = kornia_loftr(data_c['image0'], data_c['image1'])
+        mkpts0_new = mkpts0_new * data['scale0'].cpu().numpy()[:, [1, 0]]
+        mkpts1_new = mkpts1_new * data['scale1'].cpu().numpy()[:, [1, 0]]
+
+        mkpts0, mkpts1, mconfs = (mkpts0_new, mkpts1_new, mconfs_new)
 
         # Round mkpts to grid-level to construct feature tracks for the later SfM
         if args['model']['type'] is not 'coarse_only' and args['round_matches_ratio'] is not None:
-            mkpts0 = np.round((mkpts0 / data['scale0'][:, [1, 0]]) / args['round_matches_ratio']) * args['round_matches_ratio'] * data['scale0'][:, [1, 0]]
-            mkpts1 = np.round((mkpts1 / data['scale1'][:, [1, 0]]) / args['round_matches_ratio']) * args['round_matches_ratio'] * data['scale1'][:, [1, 0]]
+            mkpts0 = np.round((mkpts0 / data['scale0'][:, [1, 0]]) / args['round_matches_ratio']) * args[
+                'round_matches_ratio'] * data['scale0'][:, [1, 0]]
+            mkpts1 = np.round((mkpts1 / data['scale1'][:, [1, 0]]) / args['round_matches_ratio']) * args[
+                'round_matches_ratio'] * data['scale1'][:, [1, 0]]
 
         # Extract matches (kpts-pairs & scores)
         matches[args['pair_name_split'].join([f_name0, f_name1])] = np.concatenate(
@@ -144,9 +154,6 @@ def match_worker(subset_ids, image_lists, covis_pairs_out, cfgs, pba=None, verbo
             pba.update.remote(1)
     return matches
 
-@ray.remote(num_cpus=1, num_gpus=0.5, max_calls=1)  # release gpu after finishing
-def match_worker_ray_wrapper(*args, **kwargs):
-    return match_worker(*args, **kwargs)
 
 def keypoint_worker(name_kpts, pba=None, verbose=True):
     """merge keypoints associated with one image.
@@ -171,10 +178,6 @@ def keypoint_worker(name_kpts, pba=None, verbose=True):
         if pba is not None:
             pba.update.remote(1)
     return keypoints
-
-@ray.remote(num_cpus=1)
-def keypoints_worker_ray_wrapper(*args, **kwargs):
-    return keypoint_worker(*args, **kwargs)
 
 
 def update_matches(matches, keypoints, merge=False, pba=None, verbose=True, **kwargs):
@@ -211,14 +214,14 @@ def update_matches(matches, keypoints, merge=False, pba=None, verbose=True, **kw
 
         if merge and _merge_possible(name0) and _merge_possible(name1):
             merge_ids = []
-            mkpts0, mkpts1 = map(tuple, v[:, :2].astype(int)), map(tuple,  v[:, 2:4].astype(int))
-            for p0, p1 in zip(mkpts0, mkpts1): 
+            mkpts0, mkpts1 = map(tuple, v[:, :2].astype(int)), map(tuple, v[:, 2:4].astype(int))
+            for p0, p1 in zip(mkpts0, mkpts1):
                 if (*p0, -2) in _kpts0 and (*p1, -2) in _kpts1:
                     merge_ids.append([_kpts0[(*p0, -2)][0], _kpts1[(*p1, -2)][0]])
                 elif p0 in _kpts0 and (*p1, -2) in _kpts1:
                     merge_ids.append([_kpts0[p0][0], _kpts1[(*p1, -2)][0]])
                 elif (*p0, -2) in _kpts0 and p1 in _kpts1:
-                    merge_ids.append([_kpts0[(*p0, -2)][0], _kpts1[p1][0]]) 
+                    merge_ids.append([_kpts0[(*p0, -2)][0], _kpts1[p1][0]])
             merge_ids = np.array(merge_ids)
 
             if len(merge_ids) == 0:
@@ -226,12 +229,13 @@ def update_matches(matches, keypoints, merge=False, pba=None, verbose=True, **kw
             try:
                 mids_multiview = np.concatenate([mids, merge_ids], axis=0)
             except ValueError:
-                import ipdb; ipdb.set_trace()
-        
+                import ipdb;
+                ipdb.set_trace()
+
             mids = np.unique(mids_multiview, axis=0)
         else:
             assert (
-                len(mids) == v.shape[0]
+                    len(mids) == v.shape[0]
             ), f"len mids: {len(mids)}, num matches: {v.shape[0]}"
 
         ret_matches[k] = mids.astype(int)  # (N,2)
@@ -239,6 +243,7 @@ def update_matches(matches, keypoints, merge=False, pba=None, verbose=True, **kw
             pba.update.remote(1)
 
     return ret_matches
+
 
 @ray.remote(num_cpus=1)
 def update_matches_ray_wrapper(*args, **kwargs):
@@ -262,12 +267,13 @@ def transform_keypoints(keypoints, pba=None, verbose=True):
         scores = np.array([s[-1] for s in v.values()]).astype(np.float32)
         if len(kpts) == 0:
             logger.warning("corner-case n_kpts=0 exists!")
-            kpts = np.empty((0,2))
+            kpts = np.empty((0, 2))
         ret_kpts[k] = kpts
         ret_scores[k] = scores
         if pba is not None:
             pba.update.remote(1)
     return ret_kpts, ret_scores
+
 
 @ray.remote(num_cpus=1)
 def transform_keypoints_ray_wrapper(*args, **kwargs):

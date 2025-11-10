@@ -167,7 +167,8 @@ def resize_image(image, size, interp):
             interp = cv2.INTER_LINEAR
         resized = cv2.resize(image, size, interpolation=interp)
     elif interp.startswith('pil_'):
-        interp = getattr(PIL.Image, interp[len('pil_'):].upper())
+        # interp = getattr(PIL.Image, interp[len('pil_'):].upper())
+        interp = getattr(PIL.Image.Resampling, interp[len("pil_"):].upper())
         resized = PIL.Image.fromarray(image.astype(np.uint8))
         resized = resized.resize(size, resample=interp)
         resized = np.asarray(resized, dtype=image.dtype)

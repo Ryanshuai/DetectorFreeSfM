@@ -89,6 +89,22 @@ def main():
         # ...
         # aucs_2  all official (have not try because rio_align is not compiled)
         #
+
+        # exp000 all official with pytorch roi_align, compiled multi-view
+        # auc @ 1: 0.8913108031141395
+        # auc @ 3: 0.9561619154372627
+        # auc @ 5: 0.9736971492623576
+        # auc @ 10: 0.9868485746311787
+        # auc @ 20: 0.9934242873155894
+        #
+        # exp001 = exp000 + replace loftr with Konia loftr
+        # auc @ 1: 0.8923569476478592
+        # auc @ 3: 0.9323729508032544
+        # auc @ 5: 0.9716622005000826
+        # auc @ 10: 0.9858311002500415
+        # auc @ 20: 0.9929155501250205
+        #
+
         # aucs_2  all official with this evaluate_sfm_res
         # auc @ 1: 0.8813634737922685
         # auc @ 3: 0.9287084595180577
