@@ -8,7 +8,7 @@ def matches_to_indexed_tracks(
     matches: Dict[str, np.ndarray],
     image_names: List[str],
     pair_split: str = " "
-) -> Tuple[Dict[str, Dict[Tuple[int, int], Tuple[int, float]]], Dict[str, np.ndarray]]:
+) -> Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray], Dict[str, np.ndarray]]:
     """
     Convert pairwise matches to indexed keypoint correspondences.
 
@@ -27,10 +27,13 @@ def matches_to_indexed_tracks(
     # Step 2: Deduplicate and assign unique IDs
     image_keypoint_to_index = build_keypoint_to_index(keypoints_raw)
 
-    # Step 3: Convert coordinate matches to index matches
+    # Step 3: Convert to arrays
+    keypoints, scores = keypoint_dict_to_arrays(image_keypoint_to_index)
+
+    # Step 4: Convert matches to indices
     match_indices = matches_to_indices(matches, image_keypoint_to_index, pair_split)
 
-    return image_keypoint_to_index, match_indices
+    return keypoints, scores, match_indices
 
 
 def extract_keypoints_from_matches(matches, image_names, pair_split):
@@ -59,9 +62,26 @@ def build_keypoint_to_index(keypoints_raw):
     return im_kpt_to_idx
 
 
+def keypoint_dict_to_arrays(im_kpt_to_idx):
+    """Convert {(x,y): (idx, score)} to arrays [N,2] and [N]"""
+    keypoints = {}
+    scores = {}
+
+    for name, kpt_dict in im_kpt_to_idx.items():
+        # Sort by idx to ensure correct ordering
+        sorted_items = sorted(kpt_dict.items(), key=lambda x: x[1][0])
+
+        kpts_arr = np.array([coord for coord, _ in sorted_items], dtype=np.float32)
+        scores_arr = np.array([score for _, (_, score) in sorted_items], dtype=np.float32)
+
+        keypoints[name] = kpts_arr
+        scores[name] = scores_arr
+
+    return keypoints, scores
+
+
 def matches_to_indices(matches, im_kpt_to_idx, pair_split):
     match_indices = {}
-
     for pair_key, match_data in matches.items():
         name0, name1 = pair_key.split(pair_split)
         kpt_to_idx_0, kpt_to_idx_1 = im_kpt_to_idx[name0], im_kpt_to_idx[name1]
@@ -72,6 +92,7 @@ def matches_to_indices(matches, im_kpt_to_idx, pair_split):
             if coord0 in kpt_to_idx_0 and coord1 in kpt_to_idx_1:
                 indices.append([kpt_to_idx_0[coord0][0], kpt_to_idx_1[coord1][0]])
 
-        match_indices[pair_key] = np.array(indices, dtype=np.int32)
+        # Transpose to (2, N) format
+        match_indices[pair_key] = np.array(indices, dtype=np.int32).T
 
     return match_indices

@@ -1,10 +1,6 @@
 import os.path as osp
-from typing import ChainMap
 import os
 
-import math
-
-from src.utils.ray_utils import split_dict
 from src.utils.data_io import save_h5, load_h5
 from .coarse_match_worker import *
 from .match_to_track import matches_to_indexed_tracks
@@ -111,38 +107,19 @@ def detector_free_coarse_matching(
         logger.info(f"Raw matches cach begin: {cache_dir}")
         save_h5(matches, cache_dir, verbose=verbose)
 
-    image_keypoint_to_index, match_indices = matches_to_indexed_tracks(matches, image_lists)
+    keypoints, scores, match_indices = matches_to_indexed_tracks(matches, image_lists)
 
-    updated_matches = match_indices
-    keypoints = image_keypoint_to_index
-
-    # Post process keypoints:
-    keypoints = {
-        k: v for k, v in keypoints.items() if isinstance(v, dict)
+    # Rename: abs_path -> basename
+    keypoints_renamed = {osp.basename(k): v for k, v in keypoints.items()}
+    matches_renamed = {
+        cfgs["matcher"]["pair_name_split"].join([
+            osp.basename(name0), osp.basename(name1)
+        ]): v
+        for k, v in match_indices.items()
+        for name0, name1 in [k.split(cfgs["matcher"]["pair_name_split"])]
     }
-    logger.info("Post-processing keypoints...")
-    kpts_scores = [
-        transform_keypoints(sub_kpts, verbose=verbose)
-        for sub_kpts in split_dict(keypoints, math.ceil(len(keypoints) / 1))
-    ]
-    final_keypoints = dict(ChainMap(*[k for k, _ in kpts_scores]))
-    final_scores = dict(ChainMap(*[s for _, s in kpts_scores]))
-
-    # Reformat keypoints_dict and matches_dict
-    # from (abs_img_path0 abs_img_path1) -> (img_name0, img_name1)
-    keypoints_renamed = {}
-    for key, value in final_keypoints.items():
-        keypoints_renamed[osp.basename(key)] = value
-
-    matches_renamed = {}
-    for key, value in updated_matches.items():
-        name0, name1 = key.split(cfgs["matcher"]["pair_name_split"])
-        new_pair_name = cfgs["matcher"]["pair_name_split"].join(
-            [osp.basename(name0), osp.basename(name1)]
-        )
-        matches_renamed[new_pair_name] = value.T
 
     save_h5(keypoints_renamed, feature_out)
     save_h5(matches_renamed, match_out)
 
-    return final_keypoints, updated_matches
+    return keypoints, match_indices

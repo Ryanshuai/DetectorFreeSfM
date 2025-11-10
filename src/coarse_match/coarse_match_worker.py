@@ -151,28 +151,3 @@ def match_worker(subset_ids, image_lists, covis_pairs_out, cfgs, pba=None, verbo
         if pba is not None:
             pba.update.remote(1)
     return matches
-
-
-def transform_keypoints(keypoints, pba=None, verbose=True):
-    """assume keypoints sorted w.r.t. score"""
-    ret_kpts = {}
-    ret_scores = {}
-
-    if verbose:
-        keypoints_items = tqdm(keypoints.items()) if pba is None else keypoints.items()
-    else:
-        assert pba is None
-        keypoints_items = keypoints.items()
-
-    for k, v in keypoints_items:
-        v = {_k: _v for _k, _v in v.items() if len(_k) == 2}
-        kpts = np.array([list(kpt) for kpt in v.keys()]).astype(np.float32)
-        scores = np.array([s[-1] for s in v.values()]).astype(np.float32)
-        if len(kpts) == 0:
-            logger.warning("corner-case n_kpts=0 exists!")
-            kpts = np.empty((0, 2))
-        ret_kpts[k] = kpts
-        ret_scores[k] = scores
-        if pba is not None:
-            pba.update.remote(1)
-    return ret_kpts, ret_scores
