@@ -10,6 +10,7 @@ from src.utils.vis_utils import save_colmap_ws_to_vis3d
 from src.utils.colmap.eval_helper import get_best_colmap_index
 from .coarse_match.coarse_match import detector_free_coarse_matching
 from .sfm_runner import coarse_SfM_runner
+from .post_optimization.post_optimization import post_optimization
 
 
 def DetectorFreeSfM(
@@ -138,74 +139,55 @@ def DetectorFreeSfM(
             verbose=verbose,
         )
 
+    best_model_id = '0'
     if not triangulation_mode:
         best_model_id = get_best_colmap_index(colmap_coarse_dir)
-    else:
-        best_model_id = '0'
-    save_colmap_ws_to_vis3d(
-        osp.join(colmap_coarse_dir, best_model_id),
-        vis_dir,
-        name_prefix="coarse",
-    ) if visualize else None
 
-    if evaluator is not None and not enable_post_optimization:
-        error_dict, metrics_dict = evaluator.eval_metric(
-            osp.join(colmap_coarse_dir, best_model_id)
+    if visualize:
+        save_colmap_ws_to_vis3d(osp.join(colmap_coarse_dir, best_model_id), vis_dir, name_prefix="coarse")
+
+    if not osp.exists(osp.join(colmap_refined_dir, "images.bin")) or args.redo_refine:
+        post_optimization(
+            img_list,
+            img_pairs,
+            match_out_pth=match_out,
+            chunk_size=args.NEUSFM_refinement_chunk_size,
+            matcher_model_path=args.NEUSFM_fine_match_model_path,
+            matcher_cfg_path=args.NEUSFM_fine_match_cfg_path,
+            img_resize=img_resize,
+            img_preload=img_preload,
+            colmap_coarse_dir=osp.join(colmap_coarse_dir, best_model_id),
+            refined_model_save_dir=colmap_refined_dir,
+            only_basename_in_colmap=True,
+            fine_match_use_ray=use_ray,
+            ray_cfg=ray_cfg,
+            colmap_configs=colmap_configs,
+            refine_iter_n_times=args.refine_iter_n_times,
+            refine_3D_pts_only=triangulation_mode and not args.tri_refine_pose_and_points,
+            verbose=verbose,
         )
-        return metrics_dict
+    if visualize:
+        save_colmap_ws_to_vis3d(colmap_refined_dir, vis_dir, name_prefix="after_refine")
 
-    # Post Optimization
-    if enable_post_optimization:
-        from .post_optimization.post_optimization import post_optimization
+    if evaluator:
+        logger.info(f"Metric of: Coarse reconstruction")
 
-        if (
-                not osp.exists(osp.join(colmap_refined_dir, "images.bin"))
-                or args.redo_refine
-        ):
-            post_optimization(
-                img_list,
-                img_pairs,
-                match_out_pth=match_out,
-                chunk_size=args.NEUSFM_refinement_chunk_size,
-                matcher_model_path=args.NEUSFM_fine_match_model_path,
-                matcher_cfg_path=args.NEUSFM_fine_match_cfg_path,
-                img_resize=img_resize,
-                img_preload=img_preload,
-                colmap_coarse_dir=osp.join(colmap_coarse_dir, best_model_id),
-                refined_model_save_dir=colmap_refined_dir,
-                only_basename_in_colmap=True,
-                fine_match_use_ray=use_ray,
-                ray_cfg=ray_cfg,
-                colmap_configs=colmap_configs,
-                refine_iter_n_times=args.refine_iter_n_times,
-                refine_3D_pts_only=triangulation_mode and not args.tri_refine_pose_and_points,
-                verbose=verbose,
-            )
+    error_dict, metrics_dict = evaluator.eval_metric(osp.join(colmap_coarse_dir, best_model_id))
 
-        save_colmap_ws_to_vis3d(
-            colmap_refined_dir, vis_dir, name_prefix="after_refine"
-        ) if visualize else None
+    temp_refined_dirs = [
+        osp.join(osp.dirname(colmap_refined_dir), f"model_refined_{id}")
+        for id in range(args.refine_iter_n_times - 1)
+    ]
 
-        # Evaluation:
-        if evaluator is not None:
-            logger.info(
-                f"Metric of: Coarse reconstruction"
-            ) if verbose else None
-            error_dict, metrics_dict = evaluator.eval_metric(
-                osp.join(colmap_coarse_dir, best_model_id)
-            )
-            temp_refined_dirs = [
-                osp.join(osp.dirname(colmap_refined_dir), f"model_refined_{id}")
-                for id in range(args.refine_iter_n_times - 1)
-            ]
-            for temp_dir in temp_refined_dirs:
-                logger.info(f"Metric of: {temp_dir}") if verbose else None
-                error_dict, metrics_dict = evaluator.eval_metric(
-                    osp.join(osp.dirname(colmap_refined_dir), temp_dir)
-                )
+    for temp_dir in temp_refined_dirs:
+        if verbose:
+            logger.info(f"Metric of: {temp_dir}")
+        error_dict, metrics_dict = evaluator.eval_metric(
+            osp.join(osp.dirname(colmap_refined_dir), temp_dir)
+        )
 
-            logger.info(f"Metric of: Final") if verbose else None
-            error_dict, metrics_dict = evaluator.eval_metric(colmap_refined_dir)
+    logger.info(f"Metric of: Final") if verbose else None
+    error_dict, metrics_dict = evaluator.eval_metric(colmap_refined_dir)
 
-            metrics_dict = evaluator.prepare_output_from_buffer()
-            return metrics_dict
+    metrics_dict = evaluator.prepare_output_from_buffer()
+    return metrics_dict
