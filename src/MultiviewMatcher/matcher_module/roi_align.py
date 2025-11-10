@@ -69,4 +69,11 @@ class RoIAlign(nn.Module):
             )
             crops.append(crop)
 
+        if len(crops) == 0:
+            return torch.zeros(
+                (0, featuremap.shape[1], self.crop_height, self.crop_width),
+                device=featuremap.device,
+                dtype=featuremap.dtype,
+            )
+
         return torch.cat(crops, dim=0)
