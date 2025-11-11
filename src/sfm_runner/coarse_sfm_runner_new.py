@@ -25,13 +25,7 @@ def coarse_SfM_runner(
     os.makedirs(coarse_dir, exist_ok=True)
     pair_path = osp.join(coarse_dir, 'pairs.txt')
     with open(pair_path, "w") as f:
-        for img_pair in img_pairs:
-            img0_path, img1_path = img_pair.split(" ")
-            img0_name = osp.basename(img0_path)
-            img1_name = osp.basename(img1_path)
-
-            # Load matches
-            f.write(img0_name + " " + img1_name + "\n")
+        f.write("\n".join(img_pairs))
 
     if not triangulation_mode:
         reconstruction.main(Path(coarse_dir), Path(image_dir), Path(pair_path), Path(feature_out),

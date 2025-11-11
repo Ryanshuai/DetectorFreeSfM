@@ -56,18 +56,14 @@ class SfMRefiner:
         matcher_model_path=None,
         matcher_cfg_path=None,
         chunk_size=6000,
-        img_preload=False,
-        refine_iter_n_times=2,
         use_pba=True,
         colmap_configs=None,
     ):
         self.cfgs = cfgs
         self.colmap_configs = colmap_configs or {}
 
-        self.cfgs['refine_iter_n_times'] = refine_iter_n_times
         self.cfgs['fine_matcher']['model']['cfg_path'] = matcher_cfg_path
         self.cfgs['fine_matcher']['model']['weight_path'] = matcher_model_path
-        self.cfgs['coarse_colmap_data']['img_preload'] = img_preload
         self.cfgs['multiview_matcher_data']['chunk'] = chunk_size
         self.cfgs['incremental_refiner_use_pba'] = self.colmap_configs.get('use_pba', use_pba)
 
@@ -173,18 +169,12 @@ def post_optimization(
     covis_pairs_pth,
     colmap_coarse_dir,
     refined_model_save_dir,
-    match_out_pth,
     image_path="",
     chunk_size=6000,
     matcher_model_path=None,
     matcher_cfg_path=None,
-    img_resize=None,
-    img_preload=False,
     colmap_configs=None,
     only_basename_in_colmap=False,
-    visualize_dir=None,
-    vis3d_pth=None,
-    refine_iter_n_times=2,
     refine_3D_pts_only=False,
     verbose=True
 ):
@@ -193,8 +183,6 @@ def post_optimization(
         matcher_model_path=matcher_model_path,
         matcher_cfg_path=matcher_cfg_path,
         chunk_size=chunk_size,
-        img_preload=img_preload,
-        refine_iter_n_times=refine_iter_n_times,
         colmap_configs=colmap_configs,
     )
     refiner.refine(

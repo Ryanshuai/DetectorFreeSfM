@@ -51,16 +51,10 @@ cfgs = {
 
 
 def detector_free_coarse_matching(
+    image_dir,
     image_lists,
     pair_list,
-    output_folder,
-    image_dir,
-    img_resize=None,
-    img_preload=False,
-    matcher='loftr',
-    match_type='coarse_only',  # ['coarse_only', 'coarse_fine']
-    match_thr=0.2,
-    match_round_ratio=None,
+    match_result_folder,
     verbose=True
 ):
     kornia_loftr = LoFTRMatcher()
@@ -69,11 +63,11 @@ def detector_free_coarse_matching(
 
     keypoints, scores, match_indices = matches_to_indexed_tracks(matches, image_lists)
 
-    cache_dir = osp.join(output_folder, "raw_matches.h5")
+    cache_dir = osp.join(match_result_folder, "raw_matches.h5")
     save_h5(matches, cache_dir, verbose=verbose)
-    feature_out = osp.join(output_folder, "keypoints.h5")
+    feature_out = osp.join(match_result_folder, "keypoints.h5")
     save_h5(keypoints, feature_out)
-    match_out = osp.join(output_folder, "matches.h5")
+    match_out = osp.join(match_result_folder, "matches.h5")
     save_h5(match_indices, match_out)
 
     return keypoints, match_indices

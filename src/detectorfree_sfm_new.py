@@ -13,7 +13,6 @@ from .post_optimization.post_optimization_class import post_optimization
 
 def DetectorFreeSfM(
     args,
-    method,
     work_dir,
     gt_pose_dir=None,
     prior_intrin_dir=None,
@@ -23,74 +22,31 @@ def DetectorFreeSfM(
     verbose=True
 ):
     # Prepare data structure
-    img_resize = args.img_resize
-    img_preload = args.img_preload
-    n_images = args.n_images
-    image_pth = osp.join(work_dir, "images")
-    assert osp.exists(image_pth), f"{image_pth} is not exist!"
-    img_names = natsort.natsorted(os.listdir(image_pth))
+    image_dir = osp.join(work_dir, "images")
+    assert osp.exists(image_dir)
+    img_names = natsort.natsorted(os.listdir(image_dir))
 
-    img_list = img_names
-
-    img_pairs = construct_img_pairs(
-        img_list, args, strategy=args.img_pair_strategy, pair_path=osp.join(work_dir, 'pairs.txt'), verbose=verbose
-    )
+    img_pairs = construct_img_pairs(img_names, args, strategy=args.img_pair_strategy, verbose=verbose)
 
     # Parse configs
     triangulation_mode = args.triangulation_mode
-    coarse_match_type = args.NEUSFM_coarse_match_type
-    coarse_matcher = args.NEUSFM_coarse_matcher
-    coarse_match_thr = args.NEUSFM_coarse_match_thr
-    coarse_match_round_ratio = args.NEUSFM_coarse_match_round
-    suffix = args.suffix if 'suffix' in args else ''
 
-    method_name = "_".join(
-        [
-            "_".join(
-                [
-                    method,
-                    coarse_matcher,
-                    coarse_match_type,
-                    f"round{coarse_match_round_ratio}"
-                    if coarse_match_round_ratio is not None
-                    else "",
-                ]
-            ),
-            "pri_pose" if triangulation_mode else "scratch",
-        ]
-    )
-    if prior_intrin_dir is None:
-        method_name += '_no_intrin'
-
-    if suffix != "":
-        method_name += f'_{suffix}'
-    feature_out = osp.join(work_dir, method_name, "keypoints.h5")
-    match_out = osp.join(work_dir, method_name, "matches.h5")  # Coarse match
-
-    colmap_coarse_dir = osp.join(work_dir, method_name, "coarse")
-    colmap_refined_dir = osp.join(work_dir, method_name, "refined")
-
+    method_name = "my_res_exp000"
     os.makedirs(osp.join(work_dir, method_name), exist_ok=True)
 
     detector_free_coarse_matching(
-        img_list,
+        image_dir,
+        img_names,
         img_pairs,
-        image_dir=image_pth,
-        output_folder=osp.join(work_dir, method_name, "matching"),
-        img_resize=img_resize,
-        img_preload=img_preload,
-        matcher=coarse_matcher,
-        match_type=coarse_match_type,
-        match_round_ratio=coarse_match_round_ratio,
-        match_thr=coarse_match_thr,
+        match_result_folder=osp.join(work_dir, method_name, "matching"),
         verbose=verbose,
     )
 
     coarse_SfM_runner(
-        img_list,
+        img_names,
         img_pairs,
-        osp.join(work_dir, method_name),
-        image_dir=image_pth,
+        coarse_dir=osp.join(work_dir, method_name, "coarse"),
+        image_dir=image_dir,
         match_folder=osp.join(work_dir, method_name, "matching"),
         colmap_configs=colmap_configs,
         triangulation_mode=triangulation_mode,
@@ -103,42 +59,39 @@ def DetectorFreeSfM(
     best_model_id = '0'
 
     post_optimization(
-        img_list,
+        img_names,
         img_pairs,
-        match_out_pth=match_out,
+        colmap_coarse_dir=osp.join(work_dir, method_name, "coarse", best_model_id),
+        refined_model_save_dir=osp.join(work_dir, method_name, "refined"),
         chunk_size=args.NEUSFM_refinement_chunk_size,
         matcher_model_path=args.NEUSFM_fine_match_model_path,
         matcher_cfg_path=args.NEUSFM_fine_match_cfg_path,
-        img_resize=img_resize,
-        img_preload=img_preload,
-        colmap_coarse_dir=osp.join(colmap_coarse_dir, best_model_id),
-        refined_model_save_dir=colmap_refined_dir,
         only_basename_in_colmap=True,
         colmap_configs=colmap_configs,
-        refine_iter_n_times=args.refine_iter_n_times,
         refine_3D_pts_only=triangulation_mode and not args.tri_refine_pose_and_points,
         verbose=verbose,
-        image_path=image_pth,
+        image_path=image_dir,
     )
 
     evaluator = (
-        Evaluator(img_list, gt_pose_dir, triangulate_mode=args.triangulation_mode, verbose=verbose)
+        Evaluator(img_names, gt_pose_dir, triangulate_mode=args.triangulation_mode, verbose=verbose)
         if not args.close_eval and gt_pose_dir is not None
         else None
     )
 
-    error_dict, metrics_dict = evaluator.eval_metric(osp.join(colmap_coarse_dir, best_model_id))
+    error_dict, metrics_dict = evaluator.eval_metric(
+        osp.join(work_dir, method_name, "coarse", best_model_id, best_model_id))
 
-    temp_refined_dirs = [osp.join(osp.dirname(colmap_refined_dir), f"refined_{id}", "0") for id in range(1, 3)]
+    temp_refined_dirs = [osp.join(osp.join(work_dir, method_name), f"refined_{id}", "0") for id in range(1, 3)]
 
     for temp_dir in temp_refined_dirs:
         logger.info(f"Metric of: {temp_dir}")
         error_dict, metrics_dict = evaluator.eval_metric(
-            osp.join(osp.dirname(colmap_refined_dir), temp_dir)
+            osp.join(osp.dirname(osp.join(work_dir, method_name, "refined")), temp_dir)
         )
 
     logger.info(f"Metric of: Final") if verbose else None
-    error_dict, metrics_dict = evaluator.eval_metric(colmap_refined_dir + "_2/0")
+    error_dict, metrics_dict = evaluator.eval_metric(osp.join(work_dir, method_name, "refined") + "_2/0")
 
     metrics_dict = evaluator.prepare_output_from_buffer()
     return metrics_dict

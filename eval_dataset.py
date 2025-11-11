@@ -63,7 +63,6 @@ def eval_core(scene_paths, cfg, worker_id=0, pba=None):
         if 'phase' not in cfg or cfg.phase == 'reconstruction':
             metric_dict = DetectorFreeSfM(
                 cfg.neuralsfm,
-                method=cfg.method,
                 work_dir=scene_path,
                 gt_pose_dir=osp.join(scene_path, "poses"),
                 prior_intrin_dir=osp.join(scene_path, "intrins")
