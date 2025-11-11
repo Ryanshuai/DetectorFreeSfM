@@ -6,15 +6,15 @@ from .match_to_track import matches_to_indexed_tracks
 
 cfgs = {
     "data": {
-        "img_resize": 1200,
+        "img_resize": 1600,
         "df": 8,
         "pad_to": None,
         "img_type": "grayscale",  # ['grayscale', 'rgb']
-        "img_preload": True,
+        "img_preload": False,
     },
     "matcher": {
         "model": {
-            "matcher": 'loftr',
+            "matcher": 'loftr_official',
             "type": "coarse_only",  # ['coarse_only', 'coarse_fine]
             "match_thr": 0.2,
             "matchformer":
@@ -62,22 +62,6 @@ def detector_free_coarse_matching(
     match_round_ratio=None,
     verbose=True
 ):
-    # Cfg overwrite:
-    cfgs['matcher']['model']['type'] = match_type
-    cfgs['matcher']['model']['match_thr'] = match_thr
-    cfgs['matcher']['model']['matcher'] = matcher
-    cfgs['matcher']['round_matches_ratio'] = match_round_ratio
-    cfgs['data']['img_resize'] = img_resize
-    cfgs['data']['img_preload'] = img_preload
-    if 'loftr' in matcher:
-        cfgs['data']['df'] = 8
-        cfgs['data']['pad_to'] = None
-    elif matcher == 'matchformer':
-        cfgs['data']['df'] = 8
-        cfgs['data']['pad_to'] = -1  # Two image must with same size
-    elif matcher == 'aspanformer':
-        cfgs['data']['df'] = None  # Will pad inner the matching module
-        cfgs['data']['pad_to'] = None
 
     kornia_loftr = LoFTRMatcher()
     kornia_loftr.prepare_data(cfgs["data"], image_lists, pair_list)
@@ -85,19 +69,11 @@ def detector_free_coarse_matching(
 
     keypoints, scores, match_indices = matches_to_indexed_tracks(matches, image_lists)
 
-    # Rename: abs_path -> basename
-    keypoints_renamed = {osp.basename(k): v for k, v in keypoints.items()}
-    matches_renamed = {
-        cfgs["matcher"]["pair_name_split"].join([osp.basename(name0), osp.basename(name1)]): v
-        for k, v in match_indices.items()
-        for name0, name1 in [k.split(cfgs["matcher"]["pair_name_split"])]
-    }
-
     cache_dir = osp.join(output_folder, "raw_matches.h5")
     save_h5(matches, cache_dir, verbose=verbose)
     feature_out = osp.join(output_folder, "keypoints.h5")
-    save_h5(keypoints_renamed, feature_out)
+    save_h5(keypoints, feature_out)
     match_out = osp.join(output_folder, "matches.h5")
-    save_h5(matches_renamed, match_out)
+    save_h5(match_indices, match_out)
 
     return keypoints, match_indices
