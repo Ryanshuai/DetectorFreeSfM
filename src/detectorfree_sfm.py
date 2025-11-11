@@ -9,7 +9,7 @@ from src.construct_pairs import construct_img_pairs
 from src.utils.vis_utils import save_colmap_ws_to_vis3d
 from src.utils.colmap.eval_helper import get_best_colmap_index
 from .coarse_match.coarse_match import detector_free_coarse_matching
-from .sfm_runner import coarse_SfM_runner
+from .sfm_runner.coarse_sfm_runner import coarse_SfM_runner
 from .post_optimization.post_optimization import post_optimization
 
 
@@ -57,8 +57,6 @@ def DetectorFreeSfM(
     img_pairs = construct_img_pairs(
         img_list, args, strategy=args.img_pair_strategy, pair_path=osp.join(work_dir, 'pairs.txt'), verbose=verbose
     )
-
-
 
     # Parse configs
     triangulation_mode = args.triangulation_mode
@@ -154,12 +152,11 @@ def DetectorFreeSfM(
             colmap_coarse_dir=osp.join(colmap_coarse_dir, best_model_id),
             refined_model_save_dir=colmap_refined_dir,
             only_basename_in_colmap=True,
-            fine_match_use_ray=use_ray,
-            ray_cfg=ray_cfg,
             colmap_configs=colmap_configs,
             refine_iter_n_times=args.refine_iter_n_times,
             refine_3D_pts_only=triangulation_mode and not args.tri_refine_pose_and_points,
             verbose=verbose,
+            #image_path=image_pth,
         )
     if visualize:
         save_colmap_ws_to_vis3d(colmap_refined_dir, vis_dir, name_prefix="after_refine")

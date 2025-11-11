@@ -114,12 +114,6 @@ def post_optimization(
     iter_id = tqdm(range(iter_n_times)) if verbose else range(iter_n_times)
 
     for i in iter_id:
-        if cfgs['first_iter_resize_img_to_half'] and i == 0:
-            cfgs["coarse_colmap_data"]['img_resize'] = img_resize // 2
-        else:
-            cfgs["coarse_colmap_data"]['img_resize'] = img_resize
-
-        # Construct scene data
         colmap_image_dataset = CoarseColmapDataset(
             cfgs["coarse_colmap_data"],
             image_lists,
@@ -138,11 +132,7 @@ def post_optimization(
                 colmap_image_dataset.update_kpts_by_current_model_projection(fix_ref_node=True)
 
         state = colmap_image_dataset.state
-        if state == False:
-            logger.warning(
-                f"Build colmap coarse dataset fail! colmap point3D or images or cameras is empty!"
-            )
-            return state, None, None
+        assert state
 
         # Fine level match
         save_path = osp.join(match_out_pth.rsplit("/", 2)[0], "fine_matches.pkl")
@@ -156,7 +146,6 @@ def post_optimization(
                 colmap_image_dataset,
                 rewindow_size_factor=rewindow_size_factor if cfgs["enable_adaptive_downscale_window"] else None,
                 model_idx=model_idx if cfgs['enable_multiple_models'] else None,
-                visualize_dir=visualize_dir,
                 verbose=verbose
             )
         else:
