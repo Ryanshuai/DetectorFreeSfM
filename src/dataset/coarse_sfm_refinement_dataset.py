@@ -1,15 +1,13 @@
-import os
 import os.path as osp
 from pathlib import Path
-from loguru import logger
-import numpy as np
-from tqdm import tqdm
 
+from loguru import logger
+from tqdm import tqdm
 from torch.utils.data import Dataset
+
 from .utils import (
     read_rgb,
 )
-
 from ..colmap.read_write_model import (
     read_images_binary,
     read_cameras_binary,
@@ -24,6 +22,7 @@ class CoarseColmapDataset(Dataset):
     def __init__(
         self,
         args,
+        image_dir,
         image_lists,
         covis_pairs,
         colmap_results_dir,  # before refine results
@@ -40,14 +39,14 @@ class CoarseColmapDataset(Dataset):
         colmap_results_dir: The directory contains images.bin(.txt) point3D.bin(.txt)...
         """
         super().__init__()
-        self.img_list = image_lists
+        self.img_list = [osp.join(image_dir, img_name) for img_name in image_lists]
 
         self.colmap_results_dir = colmap_results_dir
         self.colmap_refined_save_dir = save_dir
         self.vis_path = vis_path
 
         self.img_resize = args['img_resize']
-        self.df = args['df'] # 8
+        self.df = args['df']  # 8
         self.feature_track_assignment_strategy = args['feature_track_assignment_strategy']
         self.verbose = verbose
         self.state = True
@@ -84,12 +83,13 @@ class CoarseColmapDataset(Dataset):
         (
             self.frameId2colmapID_dict,
             self.colmapID2frameID_dict,
-        ) = self.get_frameID2colmapID(self.frame_ids, self.img_list, self.colmap_images, only_basename_in_colmap=only_basename_in_colmap)
+        ) = self.get_frameID2colmapID(self.frame_ids, self.img_list, self.colmap_images,
+                                      only_basename_in_colmap=only_basename_in_colmap)
 
         # Get intrinsic and extrinsics:
-        self.image_intrin_extrins = {} # {img_id: {'extrin': [R, t], 'intrin: 3*3}}
+        self.image_intrin_extrins = {}  # {img_id: {'extrin': [R, t], 'intrin: 3*3}}
         for img_id, colmap_image in self.colmap_images.items():
-            extrinsic = get_pose_from_colmap_image(colmap_image) # w2c, [R, t]
+            extrinsic = get_pose_from_colmap_image(colmap_image)  # w2c, [R, t]
             intrinsic = get_intrinsic_from_colmap_camera(
                 self.colmap_cameras[colmap_image.camera_id]
             )
@@ -99,12 +99,11 @@ class CoarseColmapDataset(Dataset):
 
         # Verification:
         if (
-            len(self.colmap_3ds) == 0
-            or len(self.colmap_cameras) == 0
-            or len(self.colmap_images) == 0
+                len(self.colmap_3ds) == 0
+                or len(self.colmap_cameras) == 0
+                or len(self.colmap_images) == 0
         ):
             self.state = False
-        
 
         # Get keyframes and feature track(3D points) assignment
         logger.info("Building keyframes begin....")
@@ -112,7 +111,8 @@ class CoarseColmapDataset(Dataset):
             (
                 self.keyframe_dict,
                 self.point_cloud_assigned_imgID_kptID,
-            ) = self.get_keyframes_by_scale(self.colmap_images, self.colmap_3ds, verbose=self.verbose, scale_strategy='middle')
+            ) = self.get_keyframes_by_scale(self.colmap_images, self.colmap_3ds, verbose=self.verbose,
+                                            scale_strategy='middle')
         else:
             raise NotImplementedError
 
@@ -154,7 +154,7 @@ class CoarseColmapDataset(Dataset):
             unique_frameID = unique_frameID.tolist()
             unique_frameID.pop(self_idx)  # pop self index
             frame_info.update({"related_frameID": unique_frameID})
-    
+
     def build_initial_depth_pose(self, colmap_frame_dict):
         """
         Build initial pose for each registred frame, and build initial depth for each keyframe
@@ -235,9 +235,9 @@ class CoarseColmapDataset(Dataset):
 
     def get_keyframes_by_scale(self, colmap_images, colmap_3ds, verbose=True, scale_strategy='largest'):
         # Prepare required data structures:
-        p3D_observed = {} # {img_id: {p3d_idx set}}
+        p3D_observed = {}  # {img_id: {p3d_idx set}}
         img_p3d_to_p2d = {}
-        colmap_images_state = {} # {colmap_imageID:{state: np.array [N]}}
+        colmap_images_state = {}  # {colmap_imageID:{state: np.array [N]}}
         for img_id, colmap_image in colmap_images.items():
             state_value = -2 * np.ones((colmap_image.point3D_ids.shape[0],))
             colmap_unregisted_mask = colmap_image.point3D_ids == -1
@@ -255,12 +255,12 @@ class CoarseColmapDataset(Dataset):
             points3D = []
 
             for i, img_id in enumerate(observed_images):
-                intrins.append(self.image_intrin_extrins[img_id]['intrin']) # 3*3
-                extrins.append(convert_pose2T(self.image_intrin_extrins[img_id]['extrin'])) # 4*4
-                points3D.append(point_3d.xyz[None]) # 1 * 3
-            intrins, extrins, points3D = map(lambda x: np.stack(x, axis=0), [intrins, extrins, points3D]) # N * 3 * 3
-            kpt_reproj, depth = project_point_cloud_to_image(intrins, extrins, points3D) # depth: N * 1
-            f = intrins[:, 0,0] # N
+                intrins.append(self.image_intrin_extrins[img_id]['intrin'])  # 3*3
+                extrins.append(convert_pose2T(self.image_intrin_extrins[img_id]['extrin']))  # 4*4
+                points3D.append(point_3d.xyz[None])  # 1 * 3
+            intrins, extrins, points3D = map(lambda x: np.stack(x, axis=0), [intrins, extrins, points3D])  # N * 3 * 3
+            kpt_reproj, depth = project_point_cloud_to_image(intrins, extrins, points3D)  # depth: N * 1
+            f = intrins[:, 0, 0]  # N
             scales = (f / (depth[:, 0] + 1e-4)).tolist()
 
             # Assign the feature track to the node with scale strategy
@@ -275,13 +275,15 @@ class CoarseColmapDataset(Dataset):
                 assigned_idx = np.random.choice(index)
             else:
                 raise NotImplementedError
-            assigned_img_id, assigned_point2D_idx = point_3d.image_ids[assigned_idx], point_3d.point2D_idxs[assigned_idx]
+            assigned_img_id, assigned_point2D_idx = point_3d.image_ids[assigned_idx], point_3d.point2D_idxs[
+                assigned_idx]
 
             # Update 3D state:
             colmap_3d_states[point3D_id] = (assigned_img_id, assigned_point2D_idx)
 
             # Update 2D state:
-            for idx, (img_id, point2d_idx) in enumerate(zip(point_3d.image_ids.tolist(), point_3d.point2D_idxs.tolist())):
+            for idx, (img_id, point2d_idx) in enumerate(
+                    zip(point_3d.image_ids.tolist(), point_3d.point2D_idxs.tolist())):
                 if idx == assigned_idx:
                     assert (point2d_idx == assigned_point2D_idx) and (img_id == assigned_img_id)
                     colmap_images_state[assigned_img_id]['state'][assigned_point2D_idx] = point3D_id
@@ -292,21 +294,22 @@ class CoarseColmapDataset(Dataset):
         keyframe_dict = {}
         for colmap_image_id, colmap_image_state in colmap_images_state.items():
             assert np.sum(colmap_image_state["state"] == -2) == 0
-            keyframe_dict[colmap_image_id] = (colmap_image_state['state'][colmap_image_state['state'] >= 0]).astype(np.int32)
+            keyframe_dict[colmap_image_id] = (colmap_image_state['state'][colmap_image_state['state'] >= 0]).astype(
+                np.int32)
 
         return keyframe_dict, colmap_3d_states
-   
+
     def update_kpts_by_current_model_projection(self, fix_ref_node=True):
         for image_id, image in self.colmap_images.items():
             # Load pose and intrinsics:
-            extrinsic = get_pose_from_colmap_image(image) # w2c
+            extrinsic = get_pose_from_colmap_image(image)  # w2c
             intrinsic = get_intrinsic_from_colmap_camera(
                 self.colmap_cameras[image.camera_id]
             )
 
             # Find corresponding 3D points:
             point_3d_ids = image.point3D_ids
-            point_2d_idx = np.arange(0,point_3d_ids.shape[0])
+            point_2d_idx = np.arange(0, point_3d_ids.shape[0])
             registrated_mask = point_3d_ids > -1
             point3D_coords = []
             reference_node_mask = []
@@ -318,7 +321,7 @@ class CoarseColmapDataset(Dataset):
                 else:
                     reference_node_mask.append(0)
 
-            point3D_coords = np.stack(point3D_coords) if len(point3D_coords) > 0 else np.empty((0,3)) # N*3
+            point3D_coords = np.stack(point3D_coords) if len(point3D_coords) > 0 else np.empty((0, 3))  # N*3
             reference_node_mask = np.array(reference_node_mask, dtype=np.bool)
 
             # Project:
@@ -329,7 +332,7 @@ class CoarseColmapDataset(Dataset):
                 self.colmap_images[image_id].xys[registrated_mask][~reference_node_mask] = proj2D[~reference_node_mask]
             else:
                 self.colmap_images[image_id].xys[registrated_mask] = proj2D
-    
+
     def update_refined_kpts_to_colmap_multiview(self, fine_match_results):
         for bag_results in fine_match_results:
             for refined_pts in bag_results:
@@ -339,7 +342,7 @@ class CoarseColmapDataset(Dataset):
                 duplicate_idxs = np.concatenate(np.where(self.colmap_images[image_id].point3D_ids == pt3d_id), axis=0)
 
                 self.colmap_images[image_id].xys[duplicate_idxs, :] = location + 0.5
-    
+
     def save_colmap_model(self, save_dir):
         # Write results to colmap file format
         Path(save_dir).mkdir(parents=True, exist_ok=True)
@@ -389,4 +392,3 @@ class CoarseColmapDataset(Dataset):
             "img_path": [img_name],
         }
         return data
-

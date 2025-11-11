@@ -88,6 +88,7 @@ class SfMRefiner:
         os.makedirs(stage_output_dir, exist_ok=True)
         colmap_image_dataset = CoarseColmapDataset(
             cfgs["coarse_colmap_data"],
+            image_path,
             image_lists,
             covis_pairs_pth,
             input_model_dir,
@@ -201,7 +202,7 @@ def post_optimization(
         covis_pairs_pth,
         colmap_coarse_dir,
         refined_model_save_dir,
-        only_basename_in_colmap,
+        only_basename_in_colmap= only_basename_in_colmap,
         image_path=image_path,
         refine_3D_pts_only=refine_3D_pts_only,
         verbose=verbose,

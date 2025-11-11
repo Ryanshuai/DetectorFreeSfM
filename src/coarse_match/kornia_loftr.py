@@ -40,7 +40,7 @@ class LoFTRMatcher:
         keypoints = np.round(keypoints / ratio) * ratio
         return keypoints
 
-    def match_all_pairs(self, use_image_basename=True):
+    def match_all_pairs(self):
         matches = {}
         for data in self.dataloader:
             batch_results = self.loftr_inference(data['image0'], data['image1'])
@@ -54,9 +54,6 @@ class LoFTRMatcher:
                 mkpts1 *= data_scale_1[i][[1, 0]]
                 im_0_name = data['pair_key'][0][i]
                 im_1_name = data['pair_key'][1][i]
-                if use_image_basename:
-                    im_0_name = os.path.basename(im_0_name)
-                    im_1_name = os.path.basename(im_1_name)
 
                 matches[f"{im_0_name} {im_1_name}"] = np.concatenate([mkpts0, mkpts1, mconfs[:, None]], -1)
         return matches
