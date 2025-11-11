@@ -10,9 +10,8 @@ def coarse_SfM_runner(
     img_list,
     img_pairs,
     coarse_dir,
-    feature_out,
-    match_out,
     image_dir,
+    match_folder,
     colmap_configs=None,
     triangulation_mode=False,
     prior_intrin_path=None,
@@ -20,6 +19,9 @@ def coarse_SfM_runner(
     prior_model_path=None,
     verbose=True
 ):
+    feature_out = osp.join(match_folder, 'keypoints.h5')
+    match_out = osp.join(match_folder, 'matches.h5')
+
     os.makedirs(coarse_dir, exist_ok=True)
     pair_path = osp.join(coarse_dir, 'pairs.txt')
     with open(pair_path, "w") as f:

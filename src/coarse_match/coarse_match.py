@@ -1,7 +1,7 @@
 import os.path as osp
 import os
 
-from src.utils.data_io import save_h5, load_h5
+from src.utils.data_io import save_h5
 from .coarse_match_worker import *
 from .match_to_track import matches_to_indexed_tracks
 
@@ -53,9 +53,8 @@ cfgs = {
 
 def detector_free_coarse_matching(
     image_lists,
-    covis_pairs_out,
-    feature_out,
-    match_out,
+    pair_list,
+    output_folder,
     img_resize=None,
     img_preload=False,
     matcher='loftr',
@@ -81,45 +80,24 @@ def detector_free_coarse_matching(
         cfgs['data']['df'] = None  # Will pad inner the matching module
         cfgs['data']['pad_to'] = None
 
-    # Construct directory
-    base_dir = feature_out.rsplit("/", 1)[0]
-    os.makedirs(base_dir, exist_ok=True)
-    cache_dir = osp.join(feature_out.rsplit("/", 1)[0], "raw_matches.h5")
-
-    if isinstance(covis_pairs_out, list):
-        pair_list = covis_pairs_out
-    else:
-        assert osp.exists(covis_pairs_out)
-        # Load pairs: 
-        with open(covis_pairs_out, 'r') as f:
-            pair_list = f.read().rstrip('\n').split('\n')
-
-    # Matcher runner
-    if not cfgs["coarse_match_debug"] and osp.exists(cache_dir):
-        matches = load_h5(cache_dir, transform_slash=True)
-        logger.info("Caches raw matches loaded!")
-    else:
-        all_ids = np.arange(0, len(pair_list))
-
-        matches = match_worker(all_ids, image_lists, covis_pairs_out, cfgs, verbose=verbose)
-        logger.info("Matcher finish!")
-
-        logger.info(f"Raw matches cach begin: {cache_dir}")
-        save_h5(matches, cache_dir, verbose=verbose)
+    all_ids = np.arange(0, len(pair_list))
+    matches = match_worker(all_ids, image_lists, pair_list, cfgs, verbose=verbose)
 
     keypoints, scores, match_indices = matches_to_indexed_tracks(matches, image_lists)
 
     # Rename: abs_path -> basename
     keypoints_renamed = {osp.basename(k): v for k, v in keypoints.items()}
     matches_renamed = {
-        cfgs["matcher"]["pair_name_split"].join([
-            osp.basename(name0), osp.basename(name1)
-        ]): v
+        cfgs["matcher"]["pair_name_split"].join([osp.basename(name0), osp.basename(name1)]): v
         for k, v in match_indices.items()
         for name0, name1 in [k.split(cfgs["matcher"]["pair_name_split"])]
     }
 
+    cache_dir = osp.join(output_folder, "raw_matches.h5")
+    save_h5(matches, cache_dir, verbose=verbose)
+    feature_out = osp.join(output_folder, "keypoints.h5")
     save_h5(keypoints_renamed, feature_out)
+    match_out = osp.join(output_folder, "matches.h5")
     save_h5(matches_renamed, match_out)
 
     return keypoints, match_indices

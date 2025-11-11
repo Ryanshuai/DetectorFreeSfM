@@ -71,9 +71,6 @@ def eval_core(scene_paths, cfg, worker_id=0, pba=None):
                 else None,
                 prior_pose_dir=osp.join(scene_path, "poses") if cfg.neuralsfm.triangulation_mode else None,
                 colmap_configs=cfg.colmap_cfg,
-                use_ray=cfg.sub_use_ray,
-                ray_cfg=ray_cfg,
-                visualize=cfg.visualize,
                 verbose=cfg.verbose,
             )
         else:

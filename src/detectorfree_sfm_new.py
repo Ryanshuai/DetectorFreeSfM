@@ -6,11 +6,8 @@ import natsort
 
 from src.evaluator import Evaluator
 from src.construct_pairs import construct_img_pairs
-from src.utils.vis_utils import save_colmap_ws_to_vis3d
-from src.utils.colmap.eval_helper import get_best_colmap_index
 from .coarse_match.coarse_match import detector_free_coarse_matching
 from .sfm_runner.coarse_sfm_runner_new import coarse_SfM_runner
-
 from .post_optimization.post_optimization_class import post_optimization
 
 
@@ -23,10 +20,7 @@ def DetectorFreeSfM(
     prior_pose_dir=None,
     prior_colmap_dir=None,
     colmap_configs=None,
-    use_ray=False,
-    ray_cfg=None,
-    verbose=True,
-    visualize=True,
+    verbose=True
 ):
     # Prepare data structure
     img_resize = args.img_resize
@@ -61,7 +55,6 @@ def DetectorFreeSfM(
 
     # Parse configs
     triangulation_mode = args.triangulation_mode
-    enable_post_optimization = args.NEUSFM_enable_post_optimization
     coarse_match_type = args.NEUSFM_coarse_match_type
     coarse_matcher = args.NEUSFM_coarse_matcher
     coarse_match_thr = args.NEUSFM_coarse_match_thr
@@ -90,78 +83,59 @@ def DetectorFreeSfM(
         method_name += f'_{suffix}'
     feature_out = osp.join(work_dir, method_name, "keypoints.h5")
     match_out = osp.join(work_dir, method_name, "matches.h5")  # Coarse match
+
     colmap_coarse_dir = osp.join(work_dir, method_name, "coarse")
     colmap_refined_dir = osp.join(work_dir, method_name, "refined")
-    vis_dir = osp.join(work_dir, "vis3d", method_name)
 
-    # if osp.exists(osp.join(work_dir, method_name)) and args.redo_all:
-    #     os.system(f"rm -rf {osp.join(work_dir, method_name)}")
     os.makedirs(osp.join(work_dir, method_name), exist_ok=True)
 
-    if not osp.exists(match_out) or args.redo_matching:
-        # Coarse-Level Matching:
-        logger.info("Detector-free coarse matching begin...")
-        detector_free_coarse_matching(
-            img_list,
-            img_pairs,
-            feature_out=feature_out,
-            match_out=match_out,
-            img_resize=img_resize,
-            img_preload=img_preload,
-            matcher=coarse_matcher,
-            match_type=coarse_match_type,
-            match_round_ratio=coarse_match_round_ratio,
-            match_thr=coarse_match_thr,
-            verbose=verbose,
-        )
+    detector_free_coarse_matching(
+        img_list,
+        img_pairs,
+        output_folder=osp.join(work_dir, method_name, "matching"),
+        img_resize=img_resize,
+        img_preload=img_preload,
+        matcher=coarse_matcher,
+        match_type=coarse_match_type,
+        match_round_ratio=coarse_match_round_ratio,
+        match_thr=coarse_match_thr,
+        verbose=verbose,
+    )
 
-    if not osp.exists(colmap_coarse_dir) or args.redo_sfm:
-        # Coarse Mapping:
-        logger.info("Coarse mapping begin...")
-        coarse_SfM_runner(
-            img_list,
-            img_pairs,
-            osp.join(work_dir, method_name, "coarse"),
-            image_dir=image_pth,
-            feature_out=feature_out,
-            match_out=match_out,
-            colmap_configs=colmap_configs,
-            triangulation_mode=triangulation_mode,
-            prior_intrin_path=prior_intrin_dir,
-            prior_pose_path=prior_pose_dir if triangulation_mode else None,
-            prior_model_path=prior_colmap_dir if triangulation_mode else None,
-            verbose=verbose,
-        )
+    coarse_SfM_runner(
+        img_list,
+        img_pairs,
+        osp.join(work_dir, method_name),
+        image_dir=image_pth,
+        match_folder=osp.join(work_dir, method_name, "matching"),
+        colmap_configs=colmap_configs,
+        triangulation_mode=triangulation_mode,
+        prior_intrin_path=prior_intrin_dir,
+        prior_pose_path=prior_pose_dir if triangulation_mode else None,
+        prior_model_path=prior_colmap_dir if triangulation_mode else None,
+        verbose=verbose,
+    )
 
     best_model_id = '0'
-    if not triangulation_mode:
-        best_model_id = get_best_colmap_index(colmap_coarse_dir)
-        assert int(best_model_id) >= 0, "No valid colmap model found!"
 
-    if visualize:
-        save_colmap_ws_to_vis3d(osp.join(colmap_coarse_dir, best_model_id), vis_dir, name_prefix="coarse")
-
-    if not osp.exists(osp.join(colmap_refined_dir, "images.bin")) or args.redo_refine:
-        post_optimization(
-            img_list,
-            img_pairs,
-            match_out_pth=match_out,
-            chunk_size=args.NEUSFM_refinement_chunk_size,
-            matcher_model_path=args.NEUSFM_fine_match_model_path,
-            matcher_cfg_path=args.NEUSFM_fine_match_cfg_path,
-            img_resize=img_resize,
-            img_preload=img_preload,
-            colmap_coarse_dir=osp.join(colmap_coarse_dir, best_model_id),
-            refined_model_save_dir=colmap_refined_dir,
-            only_basename_in_colmap=True,
-            colmap_configs=colmap_configs,
-            refine_iter_n_times=args.refine_iter_n_times,
-            refine_3D_pts_only=triangulation_mode and not args.tri_refine_pose_and_points,
-            verbose=verbose,
-            image_path=image_pth,
-        )
-    if visualize:
-        save_colmap_ws_to_vis3d(colmap_refined_dir, vis_dir, name_prefix="after_refine")
+    post_optimization(
+        img_list,
+        img_pairs,
+        match_out_pth=match_out,
+        chunk_size=args.NEUSFM_refinement_chunk_size,
+        matcher_model_path=args.NEUSFM_fine_match_model_path,
+        matcher_cfg_path=args.NEUSFM_fine_match_cfg_path,
+        img_resize=img_resize,
+        img_preload=img_preload,
+        colmap_coarse_dir=osp.join(colmap_coarse_dir, best_model_id),
+        refined_model_save_dir=colmap_refined_dir,
+        only_basename_in_colmap=True,
+        colmap_configs=colmap_configs,
+        refine_iter_n_times=args.refine_iter_n_times,
+        refine_3D_pts_only=triangulation_mode and not args.tri_refine_pose_and_points,
+        verbose=verbose,
+        image_path=image_pth,
+    )
 
     evaluator = (
         Evaluator(img_list, gt_pose_dir, triangulate_mode=args.triangulation_mode, verbose=verbose)
@@ -171,20 +145,16 @@ def DetectorFreeSfM(
 
     error_dict, metrics_dict = evaluator.eval_metric(osp.join(colmap_coarse_dir, best_model_id))
 
-    temp_refined_dirs = [
-        osp.join(osp.dirname(colmap_refined_dir), f"refined_{id}")
-        for id in range(args.refine_iter_n_times - 1)
-    ]
+    temp_refined_dirs = [osp.join(osp.dirname(colmap_refined_dir), f"refined_{id}", "0") for id in range(1, 3)]
 
     for temp_dir in temp_refined_dirs:
-        if verbose:
-            logger.info(f"Metric of: {temp_dir}")
+        logger.info(f"Metric of: {temp_dir}")
         error_dict, metrics_dict = evaluator.eval_metric(
             osp.join(osp.dirname(colmap_refined_dir), temp_dir)
         )
 
     logger.info(f"Metric of: Final") if verbose else None
-    error_dict, metrics_dict = evaluator.eval_metric(colmap_refined_dir+"_2")
+    error_dict, metrics_dict = evaluator.eval_metric(colmap_refined_dir + "_2/0")
 
     metrics_dict = evaluator.prepare_output_from_buffer()
     return metrics_dict

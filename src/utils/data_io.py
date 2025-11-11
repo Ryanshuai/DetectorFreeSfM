@@ -52,6 +52,7 @@ def load_h5(file_path, transform_slash=True, parallel=False):
 
 def save_h5(dict_to_save, filename, transform_slash=True, verbose=False, as_half=False):
     """Saves dictionary to hdf5 file"""
+    os.makedirs(os.path.dirname(filename), exist_ok=True)
     with h5py.File(filename, 'w') as f:
         for key in tqdm(dict_to_save, disable=not verbose):  # h5py doesn't allow '/' in object name (will leads to sub-group)
             if as_half:

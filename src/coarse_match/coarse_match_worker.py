@@ -112,15 +112,7 @@ def match_worker(subset_ids, image_lists, covis_pairs_out, cfgs, pba=None, verbo
     dataset = CoarseMatchingDataset(cfgs["data"], image_lists, covis_pairs_out, subset_ids)
     dataloader = DataLoader(dataset, num_workers=4, pin_memory=True)
 
-    tqdm_disable = True
-    if not verbose:
-        assert pba is None
-    else:
-        if pba is None:
-            tqdm_disable = False
-
-    # match all permutations
-    for data in tqdm(dataloader, disable=tqdm_disable):
+    for data in tqdm(dataloader):
         f_name0, f_name1 = data['pair_key'][0][0], data['pair_key'][1][0]
         data_c = {
             k: v.cuda() if isinstance(v, torch.Tensor) else v for k, v in data.items()
