@@ -54,6 +54,7 @@ def detector_free_coarse_matching(
     image_lists,
     pair_list,
     output_folder,
+    image_dir,
     img_resize=None,
     img_preload=False,
     matcher='loftr',
@@ -62,9 +63,8 @@ def detector_free_coarse_matching(
     match_round_ratio=None,
     verbose=True
 ):
-
     kornia_loftr = LoFTRMatcher()
-    kornia_loftr.prepare_data(cfgs["data"], image_lists, pair_list)
+    kornia_loftr.prepare_data(cfgs["data"], image_dir, pair_list)
     matches = kornia_loftr.match_all_pairs()
 
     keypoints, scores, match_indices = matches_to_indexed_tracks(matches, image_lists)

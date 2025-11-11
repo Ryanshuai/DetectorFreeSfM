@@ -29,25 +29,8 @@ def DetectorFreeSfM(
     image_pth = osp.join(work_dir, "images")
     assert osp.exists(image_pth), f"{image_pth} is not exist!"
     img_names = natsort.natsorted(os.listdir(image_pth))
-    img_list = [
-        osp.join(image_pth, img_name) for img_name in img_names if
-        ("._" not in img_name) and ('.DS_Store' not in img_name)
-    ]
 
-    # Used for debugging:
-    if n_images is not None:
-        img_list = img_list[:n_images]
-
-    selected_img_list = []
-    if args.down_sample_ratio is not None:
-        assert args.down_sample_ratio > 0
-        for id, img_path in enumerate(img_list):
-            if id % args.down_sample_ratio == 0:
-                selected_img_list.append(img_path)
-        logger.info(f"total: {len(selected_img_list)} images")
-        img_list = selected_img_list
-
-    logger.info(f"Total {len(img_list)} images") if verbose else None
+    img_list = img_names
 
     img_pairs = construct_img_pairs(
         img_list, args, strategy=args.img_pair_strategy, pair_path=osp.join(work_dir, 'pairs.txt'), verbose=verbose
@@ -92,6 +75,7 @@ def DetectorFreeSfM(
     detector_free_coarse_matching(
         img_list,
         img_pairs,
+        image_dir=image_pth,
         output_folder=osp.join(work_dir, method_name, "matching"),
         img_resize=img_resize,
         img_preload=img_preload,
