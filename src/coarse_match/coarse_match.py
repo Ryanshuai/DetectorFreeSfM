@@ -1,8 +1,7 @@
 import os.path as osp
-import os
 
 from src.utils.data_io import save_h5
-from .coarse_match_worker import *
+from .kornia_loftr import LoFTRMatcher
 from .match_to_track import matches_to_indexed_tracks
 
 cfgs = {
@@ -80,8 +79,9 @@ def detector_free_coarse_matching(
         cfgs['data']['df'] = None  # Will pad inner the matching module
         cfgs['data']['pad_to'] = None
 
-    all_ids = np.arange(0, len(pair_list))
-    matches = match_worker(all_ids, image_lists, pair_list, cfgs, verbose=verbose)
+    kornia_loftr = LoFTRMatcher()
+    kornia_loftr.prepare_data(cfgs["data"], image_lists, pair_list)
+    matches = kornia_loftr.match_all_pairs()
 
     keypoints, scores, match_indices = matches_to_indexed_tracks(matches, image_lists)
 

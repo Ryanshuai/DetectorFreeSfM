@@ -15,7 +15,7 @@ class CoarseMatchingDataset(Dataset):
         args,
         image_lists,
         covis_pairs,
-        subset_ids,
+        subset_ids=None,
     ):
         """
         Parameters:
@@ -28,7 +28,7 @@ class CoarseMatchingDataset(Dataset):
         self.pad_to = args['pad_to']
         self.img_dict = {}
         self.preload = args['img_preload']
-        self.subset_ids = subset_ids # List
+        self.subset_ids = subset_ids or list(range(len(covis_pairs)))
 
         if isinstance(covis_pairs, list):
             self.pair_list = covis_pairs
