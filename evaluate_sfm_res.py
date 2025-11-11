@@ -14,8 +14,9 @@ def main():
     for scene in SCENES:
         scene_dir = BASE_DIR / scene
         method_root = scene_dir / METHOD_DIR
-        coarse_root = method_root / "colmap_coarse"
-        refined_root = method_root / "colmap_refined"
+        coarse_root = method_root / "coarse"
+        refined_root = method_root / "refined_2" / "0"
+        # refined_root = method_root / "refined"
         pose_gt_path = scene_dir / "poses"
         image_dir = scene_dir / "images"
 
@@ -97,13 +98,39 @@ def main():
         # auc @ 10: 0.9868485746311787
         # auc @ 20: 0.9934242873155894
         #
-        # exp001 = exp000 + replace loftr with Konia loftr
+        # exp001 = exp000 + replace_loftr_with_Konia_loftr
         # auc @ 1: 0.8923569476478592
         # auc @ 3: 0.9323729508032544
         # auc @ 5: 0.9716622005000826
         # auc @ 10: 0.9858311002500415
         # auc @ 20: 0.9929155501250205
+
+        # exp002 = exp000 + replace_loftr_with_Konia_loftr  (11/11)
+        # auc @ 1: 0.8914877175585373
+        # auc @ 3: 0.9320832074401473
+        # auc @ 5: 0.972319402478635
+        # auc @ 10: 0.9861597012393176
+        # auc @ 20: 0.9930798506196588
         #
+        # exp003 = exp002 + this_evaluate_sfm_res
+        # auc@1: 0.8960590649081247
+        # auc@3: 0.9336069898900098
+        # auc@5: 0.9727347781704697
+        # auc@10: 0.9863673890852347
+        # auc@20: 0.9931836945426176
+        #
+        #
+        # large refactor + this_evaluate_sfm_res
+        # align with exp002
+        # auc@1: 0.8914877175567766
+        # auc@3: 0.9320832074395605
+        # auc@5: 0.9723194024782742
+        # auc@10: 0.9861597012391371
+        # auc@20: 0.9930798506195686
+        #
+        #
+
+
 
         # aucs_2  all official with this evaluate_sfm_res
         # auc @ 1: 0.8813634737922685

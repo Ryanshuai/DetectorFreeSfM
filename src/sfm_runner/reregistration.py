@@ -11,7 +11,7 @@ def run_image_reregistration(
 ):
     logging.info("Running the bundle adjuster.")
 
-    deep_sfm_model_dir = osp.join(deep_sfm_dir, "model")
+    deep_sfm_model_dir = osp.join(deep_sfm_dir, "0")
     database_path = osp.join(deep_sfm_dir, "database.db")
     cmd = [
         str(colmap_path),
