@@ -59,6 +59,7 @@ def DetectorFreeSfM(
     best_model_id = '0'
 
     post_optimization(
+        image_dir,
         img_names,
         img_pairs,
         colmap_coarse_dir=osp.join(work_dir, method_name, "coarse", best_model_id),
@@ -70,7 +71,6 @@ def DetectorFreeSfM(
         colmap_configs=colmap_configs,
         refine_3D_pts_only=triangulation_mode and not args.tri_refine_pose_and_points,
         verbose=verbose,
-        image_path=image_dir,
     )
 
     evaluator = (

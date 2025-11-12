@@ -5,13 +5,11 @@ from .kornia_loftr import LoFTRMatcher
 from .match_to_track import matches_to_indexed_tracks
 
 coarse_matching_data_cfgs = {
-    "data": {
-        "img_resize": 1600,
-        "df": 8,
-        "pad_to": None,
-        "img_type": "grayscale",  # ['grayscale', 'rgb']
-        "img_preload": False,
-    },
+    "img_resize": 1600,
+    "df": 8,
+    "pad_to": None,
+    "img_type": "grayscale",  # ['grayscale', 'rgb']
+    "img_preload": False,
 }
 
 
