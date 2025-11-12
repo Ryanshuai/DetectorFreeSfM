@@ -4,33 +4,31 @@ import subprocess
 import os.path as osp
 import multiprocessing
 
-from pathlib import Path
-
 COLMAP_PATH = os.environ.get("COLMAP_PATH", 'colmap')  # 'colmap is default value
 
 
 def run_incremental_model_refiner(
-    input_model_dir, output_model_dir, no_filter_pts=False, image_path="/", colmap_configs=None, verbose=True,
+    input_model_dir,
+    output_model_dir,
+    database_path,
+    image_dir,
+    fixed_image_txt,
+    no_filter_pts=False, colmap_configs=None, verbose=True,
     refine_3D_pts_only=False, filter_threshold=2, use_pba=False
 ):
-    logging.info("Running the bundle adjuster.")
-    input_model_dir_model = osp.join(input_model_dir, "refined_kpts_model")
-    database_path = osp.join(input_model_dir, "database.db")
-
-    output_model_dir = os.path.join(output_model_dir, "0")
     os.makedirs(output_model_dir, exist_ok=True)
     threshold = filter_threshold
     cmd = [
         COLMAP_PATH,
         "incremental_model_refiner_no_filter_pts" if no_filter_pts else "incremental_model_refiner",
         "--input_path",
-        str(input_model_dir_model),
+        str(input_model_dir),
         "--output_path",
         str(output_model_dir),
         "--database_path",
         str(database_path),
         "--image_path",
-        str(image_path),
+        str(image_dir),
         "--Mapper.filter_max_reproj_error",
         str(threshold),
         "--Mapper.tri_merge_max_reproj_error",
@@ -50,7 +48,7 @@ def run_incremental_model_refiner(
     else:
         cmd += [
             "--image_list_path",
-            str(osp.join(input_model_dir, 'fixed_images.txt')),
+            str(fixed_image_txt),
         ]
         pass
 
@@ -97,22 +95,21 @@ def run_incremental_model_refiner(
 def main(
     input_model_dir,
     output_model_dir,
+    database_path,
+    image_dir,
     no_filter_pts=False,
-    image_path="",
     colmap_configs=None,
     refine_3D_pts_only=False,
     filter_threshold=2,
     use_pba=False,
     verbose=True,
 ):
-    assert Path(input_model_dir).exists(), input_model_dir
-
-    Path(output_model_dir).mkdir(parents=True, exist_ok=True)
     success = run_incremental_model_refiner(
         input_model_dir,
         output_model_dir,
+        database_path,
+        image_dir,
         no_filter_pts,
-        image_path,
         colmap_configs=colmap_configs,
         refine_3D_pts_only=refine_3D_pts_only,
         filter_threshold=filter_threshold,

@@ -1,27 +1,20 @@
-import os
 import logging
 import subprocess
 import os.path as osp
 
-from pathlib import Path
-
 
 def run_image_reregistration(
-    deep_sfm_dir, after_refine_dir, colmap_path, image_path="/", colmap_configs=None, verbose=True
+    input_model_dir, output_model_dir, database_path, colmap_path="colmap", colmap_configs=None, verbose=True
 ):
-    logging.info("Running the bundle adjuster.")
-
-    deep_sfm_model_dir = osp.join(deep_sfm_dir, "0")
-    database_path = osp.join(deep_sfm_dir, "database.db")
     cmd = [
         str(colmap_path),
         "image_registrator",
         "--database_path",
         str(database_path),
         "--input_path",
-        str(deep_sfm_model_dir),
+        str(input_model_dir),
         "--output_path",
-        str(after_refine_dir),
+        str(output_model_dir),
     ]
 
     if colmap_configs is not None and colmap_configs["no_refine_intrinsics"] is True:
@@ -31,7 +24,7 @@ def run_image_reregistration(
             "--Mapper.ba_refine_extra_params",
             "0",
         ]
-    
+
     if 'reregistration' in colmap_configs:
         # Set to lower threshold to registrate more images
         cmd += [
@@ -50,31 +43,10 @@ def run_image_reregistration(
         ret = subprocess.call(cmd)
     else:
         ret_all = subprocess.run(cmd, capture_output=True)
-        with open(osp.join(after_refine_dir, 'reregistration_output.txt'), 'w') as f:
+        with open(osp.join(output_model_dir, 'reregistration_output.txt'), 'w') as f:
             f.write(ret_all.stdout.decode())
         ret = ret_all.returncode
 
     if ret != 0:
         logging.warning("Problem with image registration, existing.")
         exit(ret)
-
-
-def main(
-    deep_sfm_dir,
-    after_refine_dir,
-    colmap_path="colmap",
-    image_path="/",
-    colmap_configs=None,
-    verbose=True
-):
-    assert Path(deep_sfm_dir).exists(), deep_sfm_dir
-
-    Path(after_refine_dir).mkdir(parents=True, exist_ok=True)
-    run_image_reregistration(
-        deep_sfm_dir,
-        after_refine_dir,
-        colmap_path,
-        image_path,
-        colmap_configs=colmap_configs,
-        verbose=verbose
-    )

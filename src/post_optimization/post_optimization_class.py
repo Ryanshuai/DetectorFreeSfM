@@ -1,11 +1,8 @@
 import os
-import os.path as osp
 
-from src.sfm_runner import sfm_model_geometry_refiner_new
-from src.sfm_runner import reregistration
+from src.sfm_runner.sfm_model_geometry_refiner_new import run_incremental_model_refiner
 from ..dataset.coarse_sfm_refinement_dataset import CoarseColmapDataset
 from .matcher_model import *
-from .utils.write_fixed_images import fix_farest_images, fix_all_images
 
 sfm_refiner_cfg = {
     "coarse_colmap_data": {
@@ -67,37 +64,30 @@ class SfMRefiner:
         self.cfgs['multiview_matcher_data']['chunk'] = chunk_size
         self.cfgs['incremental_refiner_use_pba'] = self.colmap_configs.get('use_pba', use_pba)
 
-    def generate_fixed_image(self, refine_3D_pts_only, colmap_coarse_dir, colmap_refined_kpts_dir):
-        os.makedirs(colmap_refined_kpts_dir, exist_ok=True)
-        os.system(
-            f"cp {osp.join(osp.dirname(colmap_coarse_dir), 'database.db')} {osp.join(colmap_refined_kpts_dir, 'database.db')}")
-        if refine_3D_pts_only:
-            fix_all_images(reconstructed_model_dir=colmap_coarse_dir,
-                           output_path=osp.join(colmap_refined_kpts_dir, 'fixed_images.txt'))
-        else:
-            fix_farest_images(reconstructed_model_dir=colmap_coarse_dir,
-                              output_path=osp.join(colmap_refined_kpts_dir, 'fixed_images.txt'))
-
     def refine_iteration(self,
                          image_dir,
                          image_names,
                          image_pairs,
+                         fixed_image_txt,
                          input_model_dir,
-                         stage_output_dir,
+                         output_track_model_dir,
+                         output_geometry_model_dir,
+                         database_path,
                          only_basename_in_colmap,
                          rewindow_size_factor,
                          filter_threshold,
                          refine_3D_pts_only,
                          colmap_configs,
                          verbose):
-        os.makedirs(stage_output_dir, exist_ok=True)
+        os.makedirs(output_track_model_dir, exist_ok=True)
+        os.makedirs(output_geometry_model_dir, exist_ok=True)
+
         colmap_image_dataset = CoarseColmapDataset(
             sfm_refiner_cfg["coarse_colmap_data"],
             image_dir,
             image_names,
             image_pairs,
             input_model_dir,
-            stage_output_dir,
             only_basename_in_colmap=only_basename_in_colmap,
             vis_path=None)
 
@@ -112,95 +102,16 @@ class SfMRefiner:
         )
 
         colmap_image_dataset.update_refined_kpts_to_colmap_multiview(fine_match_results)
-        colmap_image_dataset.save_colmap_model(osp.join(stage_output_dir, 'refined_kpts_model'))
+        colmap_image_dataset.save_colmap_model(output_track_model_dir)
 
-        success = sfm_model_geometry_refiner_new.main(stage_output_dir, stage_output_dir,
-                                                      no_filter_pts=sfm_refiner_cfg["model_refiner_no_filter_pts"],
-                                                      colmap_configs=colmap_configs, image_path=image_dir,
-                                                      verbose=verbose, refine_3D_pts_only=refine_3D_pts_only,
-                                                      filter_threshold=filter_threshold,
-                                                      use_pba=sfm_refiner_cfg["incremental_refiner_use_pba"])
+        success = run_incremental_model_refiner(output_track_model_dir,
+                                                output_geometry_model_dir,
+                                                database_path,
+                                                image_dir,
+                                                fixed_image_txt,
+                                                no_filter_pts=sfm_refiner_cfg["model_refiner_no_filter_pts"],
+                                                colmap_configs=colmap_configs,
+                                                verbose=verbose, refine_3D_pts_only=refine_3D_pts_only,
+                                                filter_threshold=filter_threshold,
+                                                use_pba=sfm_refiner_cfg["incremental_refiner_use_pba"])
         return success
-
-    def register_images(self, colmap_refined_kpts_dir, current_model_dir, colmap_configs):
-        reregistration.main(colmap_refined_kpts_dir, current_model_dir, colmap_configs=colmap_configs)
-
-    def refine(self, image_dir, img_names, img_pairs, colmap_coarse_dir, refined_output_dir,
-               only_basename_in_colmap, refine_3D_pts_only=False, verbose=True):
-
-        self.generate_fixed_image(refine_3D_pts_only, colmap_coarse_dir, refined_output_dir + "_1")
-
-        self.refine_iteration(
-            image_dir,
-            img_names,
-            img_pairs,
-            colmap_coarse_dir,
-            refined_output_dir + "_1",
-            only_basename_in_colmap,
-            rewindow_size_factor=0,  # TODO i*2
-            filter_threshold=self.cfgs['incremental_refiner_filter_thresholds'][0],
-            refine_3D_pts_only=refine_3D_pts_only,
-            colmap_configs=self.colmap_configs,
-            verbose=verbose
-        )
-
-        if not refine_3D_pts_only:
-            self.register_images(
-                refined_output_dir + "_1",
-                os.path.join(refined_output_dir + "_1", '0'),
-                self.colmap_configs
-            )
-
-        os.makedirs(f"{refined_output_dir}_2", exist_ok=True)
-        os.system(f"cp {refined_output_dir}_1/fixed_images.txt {refined_output_dir}_2/")
-        os.system(f"cp {refined_output_dir}_1/database.db {refined_output_dir}_2/")
-
-        # self.generate_fixed_image(refine_3D_pts_only, os.path.join(refined_output_dir + "_1", '0'),
-        #                           refined_output_dir + "_2")
-
-        self.refine_iteration(
-            image_dir,
-            img_names,
-            img_pairs,
-            os.path.join(refined_output_dir + "_1", '0'),
-            refined_output_dir + "_2",
-            only_basename_in_colmap,
-            rewindow_size_factor=2,  # TODO i*2
-            filter_threshold=self.cfgs['incremental_refiner_filter_thresholds'][1],
-            refine_3D_pts_only=refine_3D_pts_only,
-            colmap_configs=self.colmap_configs,
-            verbose=verbose
-        )
-
-
-def post_optimization(
-    image_dir,
-    image_lists,
-    covis_pairs_pth,
-    colmap_coarse_dir,
-    refined_model_save_dir,
-    chunk_size=6000,
-    matcher_model_path=None,
-    matcher_cfg_path=None,
-    colmap_configs=None,
-    only_basename_in_colmap=False,
-    refine_3D_pts_only=False,
-    verbose=True
-):
-    refiner = SfMRefiner(
-        sfm_refiner_cfg,
-        matcher_model_path=matcher_model_path,
-        matcher_cfg_path=matcher_cfg_path,
-        chunk_size=chunk_size,
-        colmap_configs=colmap_configs,
-    )
-    refiner.refine(
-        image_dir,
-        image_lists,
-        covis_pairs_pth,
-        colmap_coarse_dir,
-        refined_model_save_dir,
-        only_basename_in_colmap=only_basename_in_colmap,
-        refine_3D_pts_only=refine_3D_pts_only,
-        verbose=verbose,
-    )

@@ -26,7 +26,6 @@ class CoarseColmapDataset(Dataset):
         image_lists,
         covis_pairs,
         colmap_results_dir,  # before refine results
-        save_dir,
         only_basename_in_colmap=False,
         vis_path=None,
         verbose=True
@@ -42,7 +41,6 @@ class CoarseColmapDataset(Dataset):
         self.img_list = [osp.join(image_dir, img_name) for img_name in image_lists]
 
         self.colmap_results_dir = colmap_results_dir
-        self.colmap_refined_save_dir = save_dir
         self.vis_path = vis_path
 
         self.img_resize = args['img_resize']
