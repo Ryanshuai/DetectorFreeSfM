@@ -1,12 +1,17 @@
 import os
 import os.path as osp
+from pathlib import Path
 import shutil
 
 from loguru import logger
 import natsort
 
+from src.utils.data_io import save_h5
+from .coarse_match.kornia_loftr import LoFTRMatcher
+from .coarse_match.match_to_track import matches_to_indexed_tracks
 from src.evaluator import Evaluator
 from src.construct_pairs import construct_img_pairs
+from third_party.Hierarchical_Localization.hloc import reconstruction
 from .post_optimization.post_optimization_class import SfMRefiner, sfm_refiner_cfg
 from .post_optimization.utils.write_fixed_images import fix_farest_images
 from src.sfm_runner.reregistration import run_image_reregistration
@@ -71,15 +76,15 @@ def DetectorFreeSfM(
     # ==================================================================================================================
     """)
 
-    # kornia_loftr = LoFTRMatcher()
-    # kornia_loftr.prepare_data(coarse_matching_data_cfgs, img_dir, img_pairs)
-    # matches = kornia_loftr.match_all_pairs()
-    #
-    # keypoints, scores, match_indices = matches_to_indexed_tracks(matches, img_names)
-    #
-    # save_h5(matches, matching_raw_match_pth)
-    # save_h5(keypoints, matching_feature_pth)
-    # save_h5(match_indices, matching_match_pth)
+    kornia_loftr = LoFTRMatcher()
+    kornia_loftr.prepare_data(coarse_matching_data_cfgs, img_dir, img_pairs)
+    matches = kornia_loftr.match_all_pairs()
+
+    keypoints, scores, match_indices = matches_to_indexed_tracks(matches, img_names)
+
+    save_h5(matches, matching_raw_match_pth)
+    save_h5(keypoints, matching_feature_pth)
+    save_h5(match_indices, matching_match_pth)
 
     print("""
     # ==================================================================================================================
@@ -87,12 +92,12 @@ def DetectorFreeSfM(
     # ==================================================================================================================
     """)
 
-    # reconstruction.main(sfm_dir=Path(coarse_dir),
-    #                     image_dir=Path(img_dir),
-    #                     pairs=Path(coarse_pair_path),
-    #                     features=Path(matching_feature_pth),
-    #                     matches=Path(matching_match_pth),
-    #                     prior_intrin=None, verbose=verbose, colmap_configs=colmap_configs)
+    reconstruction.main(sfm_dir=Path(coarse_dir),
+                        image_dir=Path(img_dir),
+                        pairs=Path(coarse_pair_path),
+                        features=Path(matching_feature_pth),
+                        matches=Path(matching_match_pth),
+                        prior_intrin=None, verbose=verbose, colmap_configs=colmap_configs)
 
     print("""
     # ==================================================================================================================
